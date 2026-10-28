@@ -15,7 +15,8 @@ class HeadersManager {
   static const _systemVersion = '16';
   static const _buildNumber = '1610';
   static const _incremental = '14624737'; // ro.build.version.incremental
-  static const _systemHttpAgent = 'Dalvik/2.1.0 (Linux; U; Android 16; Pixel 9 Pro Build/BP4A.260205.002)';
+  static const _systemHttpAgent =
+      'Dalvik/2.1.0 (Linux; U; Android 16; Pixel 9 Pro Build/BP4A.260205.002)';
 
   static const _rcVersion = '1.3.3';
 
@@ -41,14 +42,17 @@ class HeadersManager {
     'accept': 'application/json',
     'isphysicaldevice': 'true',
     'xtbz': 'ykt',
-    'x-client': 'app'
+    'x-client': 'app',
   };
 
   static Future<void> updateChaoxingHeaders() async {
     // 内测版：@Azeroth
     // 正式版：@Kalimdor
-    final userAgentTemp = '(device:$_deviceModel) Language/zh_CN com.chaoxing.mobile/ChaoXingStudy_${_cxProductId}_${_cxVersion}_android_phone_${_cxVersionCode}_$_cxApiVersion (@Kalimdor)_$_uniqueId';
-    final schild = EncryptionUtil.md5Hash('(schild:${Constant.schildSalt}) $userAgentTemp');
+    final userAgentTemp =
+        '(device:$_deviceModel) Language/zh_CN com.chaoxing.mobile/ChaoXingStudy_${_cxProductId}_${_cxVersion}_android_phone_${_cxVersionCode}_$_cxApiVersion (@Kalimdor)_$_uniqueId';
+    final schild = EncryptionUtil.md5Hash(
+      '(schild:${Constant.schildSalt}) $userAgentTemp',
+    );
     _cxUserAgent = '$_systemHttpAgent (schild:$schild) $userAgentTemp';
 
     _cxHeaders = {
@@ -56,64 +60,42 @@ class HeadersManager {
       'Accept-Language': 'zh_CN',
       'Connection': 'keep-alive',
       'Accept-Encoding': 'gzip',
-      'content-type': 'application/x-www-form-urlencoded'
+      'content-type': 'application/x-www-form-urlencoded',
       // 'X-Requested-With': 'com.chaoxing.mobile'
     };
   }
 
-  static Map<String, String> get chaoxingHeaders => Map.unmodifiable(_cxHeaders);
+  static Map<String, String> get chaoxingHeaders =>
+      Map.unmodifiable(_cxHeaders);
 
-  static Map<String, String> get rainClassroomHeaders => Map.unmodifiable(_rcHeaders);
+  static Map<String, String> get rainClassroomHeaders =>
+      Map.unmodifiable(_rcHeaders);
 }
 
 class DioLoggerInterceptor extends Interceptor {
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    logger.i('${options.method} ${options.uri}');
-    if (options.data != null) {
-      logger.d('Body: ${_format(options.data)}');
-    }
+    logger.i('${options.method} ${options.uri.origin}${options.uri.path}');
     handler.next(options);
   }
 
   @override
   void onResponse(Response response, ResponseInterceptorHandler handler) {
     final options = response.requestOptions;
-    logger.i('${response.statusCode} ${options.method} ${options.uri}');
-    final data = response.data;
-    // 跳过二进制
-    if (data != null && data is! List<int>) {
-      logger.d('Body: ${_format(data)}');
-    }
+    logger.i(
+      '${response.statusCode} ${options.method} ${options.uri.origin}${options.uri.path}',
+    );
     handler.next(response);
   }
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
     logger.e(
-      '✗ ${err.response?.statusCode ?? '-'} ${err.requestOptions.method} ''${err.requestOptions.uri}',
-      error: err
+      '✗ ${err.response?.statusCode ?? '-'} ${err.requestOptions.method}',
     );
-    final data = err.response?.data;
-    if (data != null && data is! List<int>) {
-      logger.d('Error body: ${_format(data)}');
-    }
     handler.next(err);
   }
-
-  static String _format(dynamic data) {
-    if (data is Map || data is List) {
-      try {
-        return const JsonEncoder.withIndent('  ').convert(data);
-      } catch (_) {
-        return data.toString();
-      }
-    }
-    return data.toString();
-  }
 }
-
-
 
 class ApiService {
   static late Dio _dio;
@@ -124,7 +106,7 @@ class ApiService {
   static String get uniqueId {
     late String uniqueId;
     final prefs = StorageManager.prefs;
-    if (prefs.containsKey(_uniqueIdKey)){
+    if (prefs.containsKey(_uniqueIdKey)) {
       uniqueId = prefs.getString(_uniqueIdKey)!;
     } else {
       uniqueId = EncryptionUtil.getUniqueId();
@@ -138,9 +120,8 @@ class ApiService {
     RainClassroomServerType.yuketang: 'https://www.yuketang.cn',
     RainClassroomServerType.pro: 'https://pro.yuketang.cn',
     RainClassroomServerType.changjiang: 'https://changjiang.yuketang.cn',
-    RainClassroomServerType.huanghe: 'https://huanghe.yuketang.cn'
+    RainClassroomServerType.huanghe: 'https://huanghe.yuketang.cn',
   };
-
 
   // 初始化平台变化回调函数
   static void _setupPlatformChangeCallback() {
@@ -149,7 +130,8 @@ class ApiService {
         _dio.options.baseUrl = '';
         _dio.options.headers = HeadersManager.chaoxingHeaders;
       } else if (PlatformManager().isRainClassroom) {
-        _dio.options.baseUrl = serverBaseUrlMap[PlatformManager().currentServer]!;
+        _dio.options.baseUrl =
+            serverBaseUrlMap[PlatformManager().currentServer]!;
         _dio.options.headers = HeadersManager.rainClassroomHeaders;
       }
     };
@@ -157,16 +139,19 @@ class ApiService {
 
   static Future<void> initialize() async {
     await HeadersManager.updateChaoxingHeaders();
-    
-    _dio = Dio(BaseOptions(
-      connectTimeout: const Duration(seconds: 3),
-      receiveTimeout: const Duration(seconds: 10),
-      sendTimeout: const Duration(seconds: 10),
-      followRedirects: false,
-      validateStatus: (status) => status != null && status >= 200 && status < 400
-      // contentType: Headers.formUrlEncodedContentType, // application/x-www-form-urlencoded
-      // headers: HeadersManager.chaoxingHeaders,
-    ));
+
+    _dio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 3),
+        receiveTimeout: const Duration(seconds: 10),
+        sendTimeout: const Duration(seconds: 10),
+        followRedirects: false,
+        validateStatus: (status) =>
+            status != null && status >= 200 && status < 400,
+        // contentType: Headers.formUrlEncodedContentType, // application/x-www-form-urlencoded
+        // headers: HeadersManager.chaoxingHeaders,
+      ),
+    );
 
     /*
     // 初始化平台变化回调
@@ -186,44 +171,48 @@ class ApiService {
 
   /// 发送 HTTP 请求
   static Future<Response?> sendRequest(
-      String url,
-      {
-        String method = 'GET',
-        Map<String, String>? params,
-        Map<String, String>? headers,
-        dynamic body,
-        ResponseType responseType = ResponseType.json,
-        int? receiveTimeoutSeconds,
-        bool allowRedirects = true,
-        String? userId
-      }
-      ) async {
+    String url, {
+    String method = 'GET',
+    Map<String, String>? params,
+    Map<String, String>? headers,
+    dynamic body,
+    ResponseType responseType = ResponseType.json,
+    int? receiveTimeoutSeconds,
+    bool allowRedirects = true,
+    String? userId,
+  }) async {
     try {
       final options = Options(
         method: method,
         headers: headers,
         responseType: responseType,
         receiveTimeout: Duration(seconds: receiveTimeoutSeconds ?? 10),
-        extra: {'userId': userId ?? AccountManager.currentSessionId}
+        extra: {'userId': userId ?? AccountManager.currentSessionId},
       );
 
-      var response = await _dio.request(url, queryParameters: params, data: body, options: options);
+      var response = await _dio.request(
+        url,
+        queryParameters: params,
+        data: body,
+        options: options,
+      );
 
       if (allowRedirects) {
         int redirectCount = 0;
         const maxRedirects = 3;
-        
+
         while (redirectCount < maxRedirects) {
           var locationUrl = response.headers['location']?.first;
           if (locationUrl == null) break;
-          
+
           // 只有路径
-          if (!locationUrl.startsWith('http')){
+          if (!locationUrl.startsWith('http')) {
             final uri = response.realUri;
-            final baseUri = '${uri.scheme}://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}';
+            final baseUri =
+                '${uri.scheme}://${uri.host}${uri.hasPort ? ':${uri.port}' : ''}';
             locationUrl = baseUri + locationUrl;
           }
-          
+
           response = await _dio.get(locationUrl, options: options);
           redirectCount++;
         }
@@ -236,17 +225,17 @@ class ApiService {
       } // dio 的 json 解析有问题
 
       return response;
-    } catch (e, stackTrace) {
-      logger.e('HTTP Exception [$url]: $e\n$stackTrace');
+    } catch (e) {
+      logger.e('HTTP 请求失败 (${e.runtimeType})');
     }
     return null;
   }
 
   /// 并发用户请求
   static Future<List<T?>> sendForEachUser<T>(
-      List<User> users,
-      Future<T?> Function(User user) apiFunction,
-      ) async {
+    List<User> users,
+    Future<T?> Function(User user) apiFunction,
+  ) async {
     if (users.isEmpty) {
       return [];
     }
@@ -255,7 +244,7 @@ class ApiService {
       try {
         return await apiFunction(user);
       } catch (e) {
-        logger.e('用户 ${user.name} 请求失败: $e');
+        logger.e('账号请求失败 (${e.runtimeType})');
         return null;
       }
     }).toList();

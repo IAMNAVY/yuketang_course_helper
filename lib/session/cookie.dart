@@ -12,26 +12,34 @@ import '../utils/logger.dart';
 
 class CookieInterceptor extends Interceptor {
   @override
-  void onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
+  void onRequest(
+    RequestOptions options,
+    RequestInterceptorHandler handler,
+  ) async {
     if (options.headers['Cookie'] == null) {
       final uri = options.uri;
       List<Cookie> cookies = [];
       final String? userId = options.extra['userId'];
 
       if (userId != null) {
-        CookieJar? cookieJar = userId.isEmpty ?
-        CookieManager.tempCookieJar : CookieManager.getCookieJarForUser(userId);
+        CookieJar? cookieJar = userId.isEmpty
+            ? CookieManager.tempCookieJar
+            : CookieManager.getCookieJarForUser(userId);
 
         if (cookieJar != null) {
           cookies = await cookieJar.loadForRequest(uri);
         }
 
         if (cookies.isNotEmpty) {
-          final cookieStr = cookies.map((c) => '${c.name}=${c.value}').join('; ');
+          final cookieStr = cookies
+              .map((c) => '${c.name}=${c.value}')
+              .join('; ');
           options.headers['Cookie'] = cookieStr;
 
           if (PlatformManager().isRainClassroom) {
-            final cookieMap = Map.fromEntries(cookies.map((c) => MapEntry(c.name, c.value)));
+            final cookieMap = Map.fromEntries(
+              cookies.map((c) => MapEntry(c.name, c.value)),
+            );
             options.headers['x-csrftoken'] = cookieMap['csrftoken'];
             options.headers['x-uid'] = userId;
             options.headers['sessionid'] = cookieMap['sessionid'];
@@ -53,7 +61,7 @@ class CookieInterceptor extends Interceptor {
           cookies.add(Cookie.fromSetCookieValue(header));
         } catch (e) {
           // sso_schooltime 存在非法字符 解析器存在问题
-          logger.w('忽略错误Cookie: $header');
+          logger.w('忽略无法解析的 Cookie');
         }
       }
 
@@ -61,7 +69,10 @@ class CookieInterceptor extends Interceptor {
 
       if (userId != null) {
         if (userId.isEmpty) {
-          await CookieManager._tempCookieJar.saveFromResponse(response.realUri, cookies);
+          await CookieManager._tempCookieJar.saveFromResponse(
+            response.realUri,
+            cookies,
+          );
         } else {
           CookieJar? cookieJar = CookieManager.getCookieJarForUser(userId);
 
@@ -77,10 +88,29 @@ class CookieInterceptor extends Interceptor {
 }
 
 class CookieManager {
+  static final chaoxingOrigins = [
+    'https://chaoxing.com/',
+    'https://passport2.chaoxing.com/',
+    'https://passport2-api.chaoxing.com/',
+    'https://sso.chaoxing.com/',
+    'https://i.chaoxing.com/',
+    'https://mooc1.chaoxing.com/',
+    'https://mooc1-api.chaoxing.com/',
+    'https://mobilelearn.chaoxing.com/',
+    'https://pan-yz.chaoxing.com/',
+  ].map(Uri.parse).toList(growable: false);
+
+  static Iterable<Uri> get _origins =>
+      PlatformManager().isChaoxing ? chaoxingOrigins : [domainUri];
+
   static Uri get domainUri {
-    return PlatformManager().isChaoxing ?
-    Uri.parse('https://.chaoxing.com') : Uri.parse(ApiService.serverBaseUrlMap[PlatformManager().currentServer]!);
+    return PlatformManager().isChaoxing
+        ? Uri.parse('https://chaoxing.com/')
+        : Uri.parse(
+            ApiService.serverBaseUrlMap[PlatformManager().currentServer]!,
+          );
   }
+
   static final Map<String, CookieJar> _userCookieJars = {};
   static final CookieJar _tempCookieJar = CookieJar(); // 临时保存登录的 Cookie
   static CookieJar get tempCookieJar => _tempCookieJar;
@@ -162,45 +192,70 @@ class CookieManager {
   }
 
   /// 加载用户的 Cookie
-  static Future<void> _loadCookiesForUser(String userId, CookieJar cookieJar) async {
-    final String? cookiesJson = StorageManager.prefs.getString('cookies_$userId');
+  static Future<void> _loadCookiesForUser(
+    String userId,
+    CookieJar cookieJar,
+  ) async {
+    final String? cookiesJson = StorageManager.prefs.getString(
+      'cookies_$userId',
+    );
     if (cookiesJson == null) return;
 
     try {
       final List<dynamic> cookiesData = json.decode(cookiesJson);
-      final List<Cookie> cookies = [];
-      
+
       for (var cookieData in cookiesData) {
         final cookie = Cookie(cookieData['name'], cookieData['value']);
         cookie.domain = cookieData['domain'];
         cookie.path = cookieData['path'] ?? '/';
         cookie.secure = cookieData['secure'] ?? false;
         cookie.httpOnly = cookieData['httpOnly'] ?? false;
-        
-        cookies.add(cookie);
+        final expires = cookieData['expires'];
+        if (expires is int) {
+          cookie.expires = DateTime.fromMillisecondsSinceEpoch(
+            expires,
+            isUtc: true,
+          );
+          if (cookie.expires!.isBefore(DateTime.now())) continue;
+        }
+        final origin =
+            Uri.tryParse(cookieData['origin'] as String? ?? '') ?? domainUri;
+        await cookieJar.saveFromResponse(
+          origin.hasAuthority ? origin : domainUri,
+          [cookie],
+        );
       }
-      await cookieJar.saveFromResponse(domainUri, cookies);
     } catch (e) {
       logger.e('用户 $userId 的 Cookie 加载失败：$e');
     }
   }
 
   /// 将 CookieJar 保存到存储
-  static Future<void> _saveCookiesToStorage(String userId, CookieJar jar) async {
-    final cookies = await jar.loadForRequest(domainUri);
+  static Future<void> _saveCookiesToStorage(
+    String userId,
+    CookieJar jar,
+  ) async {
     final List<Map<String, dynamic>> cookiesData = [];
-    for (var cookie in cookies) {
-      cookiesData.add({
-        'name': cookie.name,
-        'value': cookie.value,
-        'domain': cookie.domain,
-        'path': cookie.path ?? '/',
-        'secure': cookie.secure,
-        'httpOnly': cookie.httpOnly
-      });
+    for (final origin in _origins) {
+      final cookies = await jar.loadForRequest(origin);
+      for (var cookie in cookies) {
+        cookiesData.add({
+          'origin': origin.toString(),
+          'name': cookie.name,
+          'value': cookie.value,
+          'domain': cookie.domain,
+          'path': cookie.path ?? '/',
+          'secure': cookie.secure,
+          'httpOnly': cookie.httpOnly,
+          'expires': cookie.expires?.millisecondsSinceEpoch,
+        });
+      }
     }
 
-    await StorageManager.prefs.setString('cookies_$userId', json.encode(cookiesData));
+    await StorageManager.prefs.setString(
+      'cookies_$userId',
+      json.encode(cookiesData),
+    );
   }
 
   /// 清除指定用户的所有 Cookie
@@ -211,11 +266,16 @@ class CookieManager {
 
   /// 临时Cookie保存到账号
   static Future<void> saveTempCookies(String userId) async {
-    final tempCookies = await _tempCookieJar.loadForRequest(domainUri);
-    if (tempCookies.isEmpty) return;
     // 复制一份CookieJar
     final newCookieJar = CookieJar();
-    await newCookieJar.saveFromResponse(domainUri, tempCookies);
+    var hasCookies = false;
+    for (final origin in _origins) {
+      final cookies = await _tempCookieJar.loadForRequest(origin);
+      if (cookies.isEmpty) continue;
+      hasCookies = true;
+      await newCookieJar.saveFromResponse(origin, cookies);
+    }
+    if (!hasCookies) return;
 
     _userCookieJars[userId] = newCookieJar;
     await _saveCookiesToStorage(userId, newCookieJar);

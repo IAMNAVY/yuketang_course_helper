@@ -37,6 +37,7 @@ dependencies:
   package_info_plus: ^10.2.1
   cupertino_icons: ^1.0.8
   dio: ^5.9.1
+  flutter_inappwebview: ^6.1.5
   pretty_dio_logger: ^1.4.0
   cookie_jar: ^4.0.8
   shared_preferences: ^2.2.2

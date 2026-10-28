@@ -19,8 +19,7 @@ subprojects {
             if (currentNamespace.isNullOrEmpty()) {
                 androidExtension.namespace = project.group.toString()
             }
-            // 强制设置 compileSdk 以支持新版本 API（permission_handler 需要 37）
-            androidExtension.compileSdk = 37
+            androidExtension.compileSdkVersion("android-37.0")
             // 禁用 lint 检查
             androidExtension.lint {
                 checkDependencies = false

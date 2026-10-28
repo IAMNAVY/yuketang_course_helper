@@ -11,10 +11,10 @@ plugins {
 
 val keystorePropertiesFile = rootProject.file("key.properties")
 val keystoreProperties = Properties()
+val webLoginTestBuild = !keystorePropertiesFile.exists() ||
+    providers.gradleProperty("webLoginTestBuild").orNull == "true"
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
-} else {
-    println("key.properties not found. Please create it in the android directory.")
 }
 
 kotlin {
@@ -25,8 +25,7 @@ kotlin {
 
 android {
     namespace = "com.anerycoft.coursehelper"
-    // 插件子项目被根 build.gradle.kts 强制 compileSdk 37，保持一致
-    compileSdk = maxOf(flutter.compileSdkVersion, 37)
+    compileSdkVersion("android-37.0")
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -46,6 +45,12 @@ android {
 
     defaultConfig {
         applicationId = "com.anerycoft.coursehelper"
+        if (webLoginTestBuild) {
+            applicationIdSuffix = ".weblogin"
+            manifestPlaceholders["appLabel"] = "课程助手·网页登录测试"
+        } else {
+            manifestPlaceholders["appLabel"] = "Course Helper"
+        }
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -55,7 +60,12 @@ android {
     }
 
     signingConfigs {
-        create("release") {
+        if (webLoginTestBuild) {
+            getByName("debug") {
+                storeFile = rootProject.file("debug.keystore")
+            }
+        }
+        if (keystorePropertiesFile.exists()) create("release") {
             keyAlias = keystoreProperties["keyAlias"] as String
             keyPassword = keystoreProperties["keyPassword"] as String
             storeFile = file(keystoreProperties["storeFile"] as String)
@@ -66,7 +76,7 @@ android {
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = signingConfigs.getByName(if (webLoginTestBuild) "debug" else "release")
             // signingConfig = signingConfigs.getByName("debug")
             
             // 启用代码混淆

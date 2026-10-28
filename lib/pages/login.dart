@@ -8,6 +8,7 @@ import '../session/account.dart';
 import '../utils/encrypt.dart';
 import '../platform.dart';
 import '../utils/logger.dart';
+import 'chaoxing_web_login.dart';
 
 /// 登录成功处理
 Future<bool> handleLoginSuccess(BuildContext context) async {
@@ -20,9 +21,9 @@ Future<bool> handleLoginSuccess(BuildContext context) async {
     }
     if (user == null) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('获取用户信息失败')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('获取用户信息失败')));
       }
       return false;
     }
@@ -30,16 +31,16 @@ Future<bool> handleLoginSuccess(BuildContext context) async {
     await AccountManager.addAccount(user);
 
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${user.name} 登录成功')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('${user.name} 登录成功')));
     }
     return true;
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('登录处理失败')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('登录处理失败')));
     }
     return false;
   }
@@ -82,7 +83,8 @@ class QRCodeLoginState {
     if (_isChaoxing) {
       qrUuid = qrData['uuid'];
       qrEnc = qrData['enc'];
-      qrImageUrl = 'https://passport2.chaoxing.com/createqr?uuid=$qrUuid&fid=-1';
+      qrImageUrl =
+          'https://passport2.chaoxing.com/createqr?uuid=$qrUuid&fid=-1';
     } else {
       qrToken = qrData['token'];
       qrImageUrl = qrData['qrImage'];
@@ -106,7 +108,10 @@ class QRCodeLoginState {
   }
 
   /// 开始轮询登录状态
-  void startPolling(Function(bool success) onLoginComplete, {VoidCallback? onRefresh}) {
+  void startPolling(
+    Function(bool success) onLoginComplete, {
+    VoidCallback? onRefresh,
+  }) {
     _pollingTimer?.cancel();
     this.onRefresh = onRefresh;
 
@@ -119,7 +124,9 @@ class QRCodeLoginState {
   }
 
   /// 雨课堂新API轮询逻辑（使用token）
-  void _startRainClassroomNewPolling(Function(bool success) onLoginComplete) async {
+  void _startRainClassroomNewPolling(
+    Function(bool success) onLoginComplete,
+  ) async {
     while (isLoginActive && qrToken != null) {
       try {
         final result = await RCLoginApi.loginQRCode(qrToken!);
@@ -136,7 +143,7 @@ class QRCodeLoginState {
       } catch (e) {
         logger.e('轮询失败: $e');
       }
-      
+
       // 如果不是活跃状态则退出
       if (!isLoginActive) return;
     }
@@ -176,7 +183,7 @@ class QRCodeLoginState {
     isLoading = true;
     qrImageUrl = null;
     onRefresh?.call();
-    
+
     try {
       final qrData = await _getQRCodeData();
       if (qrData != null) {
@@ -207,7 +214,7 @@ class _LoginPageState extends State<LoginPage> {
   String _currentLoginType = '1'; // '1'密码登录，'2'验证码登录，'3'二维码登录
   Timer? _countdownTimer;
   int _countdownSeconds = 0;
-  
+
   // 腾讯验证码参数
   String? _ticket;
   String? _randstr;
@@ -220,7 +227,8 @@ class _LoginPageState extends State<LoginPage> {
     }
     if (widget.initialLoginType == 'captcha') {
       _currentLoginType = '2';
-    } else if (widget.initialLoginType == 'qrcode') {
+    } else if (widget.initialLoginType == 'qrcode' &&
+        !PlatformManager().isChaoxing) {
       _currentLoginType = '3';
       _showQRCodeLogin();
     } else {
@@ -245,9 +253,9 @@ class _LoginPageState extends State<LoginPage> {
     final initialized = await qrState.initialize();
     if (!initialized) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('获取二维码失败')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('获取二维码失败')));
       }
       qrState.dispose();
       return;
@@ -272,7 +280,7 @@ class _LoginPageState extends State<LoginPage> {
             qrState.onRefresh = () {
               setState(() {});
             };
-            
+
             return PopScope(
               canPop: true,
               onPopInvokedWithResult: (bool didPop, Object? result) {
@@ -345,7 +353,10 @@ class _LoginPageState extends State<LoginPage> {
                     const Text(
                       '请使用学习通APP扫描上方二维码进行登录',
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     const Text(
@@ -379,7 +390,7 @@ class _LoginPageState extends State<LoginPage> {
   Future<bool?> _showTencentCaptcha() async {
     final config = TencentCaptchaConfig(
       bizState: 'tencent-captcha',
-      enableDarkMode: Theme.of(context).brightness == Brightness.dark
+      enableDarkMode: Theme.of(context).brightness == Brightness.dark,
     );
 
     try {
@@ -409,12 +420,12 @@ class _LoginPageState extends State<LoginPage> {
         },
       );
 
-      return completer.future;
+      return await completer.future;
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('验证异常：$e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('验证异常：$e')));
       }
       return false;
     }
@@ -426,22 +437,24 @@ class _LoginPageState extends State<LoginPage> {
       setState(() {
         _isLoading = true;
       });
-  
+
       try {
         Map<String, dynamic>? result;
-          
+
         if (PlatformManager().isChaoxing) {
           result = await CXLoginApi.loginAPP(
             _currentLoginType,
             _usernameController.text,
-            _currentLoginType == '2' ? _captchaController.text : _passwordController.text,
+            _currentLoginType == '2'
+                ? _captchaController.text
+                : _passwordController.text,
           );
-  
+
           if (result != null && result['status']) {
             if (!result.containsKey('url')) {
               await _showSecurityVerificationDialog();
             }
-  
+
             final success = await handleLoginSuccess(context);
             if (success && mounted) {
               Navigator.pop(context, true);
@@ -449,19 +462,19 @@ class _LoginPageState extends State<LoginPage> {
           } else {
             String errorMessage = result?['mes'] ?? '登录失败，请检查账号密码';
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(errorMessage)),
-              );
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text(errorMessage)));
             }
           }
         } else {
           // 雨课堂验证码前置校验
           if (_currentLoginType == '2') {
             final verifyResult = await RCLoginApi.verifyCaptcha(
-                _usernameController.text,
-                _captchaController.text
+              _usernameController.text,
+              _captchaController.text,
             );
-        
+
             if (verifyResult == null || verifyResult['code'] != 0) {
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -472,7 +485,7 @@ class _LoginPageState extends State<LoginPage> {
             }
           } else {
             // 非验证码模式需要腾讯验证码
-            if (_ticket == null || _randstr == null){
+            if (_ticket == null || _randstr == null) {
               final captchaResult = await _showTencentCaptcha();
               if (captchaResult != true) {
                 return;
@@ -483,7 +496,9 @@ class _LoginPageState extends State<LoginPage> {
           result = await RCLoginApi.login(
             _currentLoginType == '2' ? 3 : 2, // 1: 密码登录 2: 邮箱登录 3: 验证码登录
             _usernameController.text,
-            _currentLoginType == '2' ? _captchaController.text : _passwordController.text,
+            _currentLoginType == '2'
+                ? _captchaController.text
+                : _passwordController.text,
             _ticket!,
             _randstr!,
           );
@@ -509,16 +524,16 @@ class _LoginPageState extends State<LoginPage> {
             errorMessage = '登录失败，请检查账号密码';
           }
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(errorMessage)),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(errorMessage)));
           }
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('登录时发生错误：$e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('登录时发生错误：$e')));
         }
       } finally {
         if (mounted) {
@@ -534,105 +549,105 @@ class _LoginPageState extends State<LoginPage> {
     String phone = _usernameController.text.trim();
     if (phone.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('请输入手机号')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('请输入手机号')));
       }
       return;
     }
-  
+
     // 仅雨课堂需要腾讯验证码验证
     if (PlatformManager().isRainClassroom) {
       final captchaResult = await _showTencentCaptcha();
       if (captchaResult != true) {
         return;
       }
-  
+
       if (_ticket == null || _randstr == null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('验证码验证失败，请重试')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('验证码验证失败，请重试')));
         }
         return;
       }
     }
-  
+
     try {
       setState(() {
         _isLoading = true;
       });
-  
+
       Map<String, dynamic>? result;
-        
+
       if (PlatformManager().isChaoxing) {
         result = await CXLoginApi.sendCaptcha(phone);
-          
+
         if (result == null) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('发送验证码失败，请重试')),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('发送验证码失败，请重试')));
           }
           return;
         }
-  
+
         if (result['status'] == true) {
           _startCountdown();
           if (mounted) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('验证码已发送')),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text('验证码已发送')));
               }
             });
           }
         } else {
           final message = result['mes'] ?? '发送验证码失败';
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(message)),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(message)));
           }
         }
       } else {
         result = await RCLoginApi.sendCaptcha(phone, _ticket!, _randstr!);
-          
+
         if (result == null) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('发送验证码失败，请重试')),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(const SnackBar(content: Text('发送验证码失败，请重试')));
           }
           return;
         }
-  
+
         if (result['code'] == 0) {
           _startCountdown();
           if (mounted) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('验证码已发送')),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text('验证码已发送')));
               }
             });
           }
         } else {
           final message = result['msg'] ?? '发送验证码失败';
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(message)),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(message)));
           }
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('发送验证码时发生错误：$e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('发送验证码时发生错误：$e')));
       }
     } finally {
       if (mounted) {
@@ -688,14 +703,19 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (PlatformManager().isChaoxing) {
+      return ChaoxingWebLoginPage(onAuthenticated: handleLoginSuccess);
+    }
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
-        title: Text(_currentLoginType == '1'
-            ? '密码登录'
-            : _currentLoginType == '2'
-            ? '验证码登录'
-            : '二维码登录'),
+        title: Text(
+          _currentLoginType == '1'
+              ? '密码登录'
+              : _currentLoginType == '2'
+              ? '验证码登录'
+              : '二维码登录',
+        ),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
         elevation: 0,
@@ -715,10 +735,15 @@ class _LoginPageState extends State<LoginPage> {
                     controller: _usernameController,
                     keyboardType: TextInputType.number,
                     autofocus: true,
-                    autofillHints: [AutofillHints.username, AutofillHints.telephoneNumber],
+                    autofillHints: [
+                      AutofillHints.username,
+                      AutofillHints.telephoneNumber,
+                    ],
                     decoration: InputDecoration(
                       labelText: '账号',
-                      hintText: PlatformManager().isChaoxing ? '手机号/超星号' : '手机号/邮箱',
+                      hintText: PlatformManager().isChaoxing
+                          ? '手机号/超星号'
+                          : '手机号/邮箱',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
@@ -742,50 +767,11 @@ class _LoginPageState extends State<LoginPage> {
                   padding: const EdgeInsets.only(bottom: 16),
                   child: _currentLoginType == '1'
                       ? TextFormField(
-                    controller: _passwordController,
-                    obscureText: !_showPassword,
-                    autofillHints: [AutofillHints.password],
-                    decoration: InputDecoration(
-                      labelText: '密码',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(
-                          color: Theme.of(context).colorScheme.primary,
-                          width: 2,
-                        ),
-                      ),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _showPassword ? Icons.visibility : Icons.visibility_off,
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            _showPassword = !_showPassword;
-                          });
-                        },
-                      ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return '请输入密码';
-                      }
-                      return null;
-                    },
-                  )
-                      : Row(
-                    children: [
-                      Expanded(
-                        flex: 3,
-                        child: TextFormField(
-                          controller: _captchaController,
-                          focusNode: _captchaFocusNode,
-                          keyboardType: TextInputType.number,
-                          autofillHints: [AutofillHints.oneTimeCode],
+                          controller: _passwordController,
+                          obscureText: !_showPassword,
+                          autofillHints: [AutofillHints.password],
                           decoration: InputDecoration(
-                            labelText: '验证码',
+                            labelText: '密码',
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
                             ),
@@ -796,75 +782,129 @@ class _LoginPageState extends State<LoginPage> {
                                 width: 2,
                               ),
                             ),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _showPassword
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _showPassword = !_showPassword;
+                                });
+                              },
+                            ),
                           ),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
-                              return '请输入验证码';
+                              return '请输入密码';
                             }
                             return null;
                           },
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        flex: 2,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            if (_countdownSeconds == 0 && !_isLoading) {
-                              _sendCaptcha();
-                              FocusScope.of(context).requestFocus(_captchaFocusNode);
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _countdownSeconds > 0 ?
-                            Colors.grey : Theme.of(context).colorScheme.primary,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
+                        )
+                      : Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: TextFormField(
+                                controller: _captchaController,
+                                focusNode: _captchaFocusNode,
+                                keyboardType: TextInputType.number,
+                                autofillHints: [AutofillHints.oneTimeCode],
+                                decoration: InputDecoration(
+                                  labelText: '验证码',
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: BorderSide(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.primary,
+                                      width: 2,
+                                    ),
+                                  ),
+                                ),
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return '请输入验证码';
+                                  }
+                                  return null;
+                                },
+                              ),
                             ),
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                          ),
-                          child: Text(
-                            _countdownSeconds > 0 ?
-                            '${_countdownSeconds}s' : '获取验证码',
-                            style: const TextStyle(color: Colors.white),
-                          ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              flex: 2,
+                              child: ElevatedButton(
+                                onPressed: () {
+                                  if (_countdownSeconds == 0 && !_isLoading) {
+                                    _sendCaptcha();
+                                    FocusScope.of(
+                                      context,
+                                    ).requestFocus(_captchaFocusNode);
+                                  }
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: _countdownSeconds > 0
+                                      ? Colors.grey
+                                      : Theme.of(context).colorScheme.primary,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 16,
+                                  ),
+                                ),
+                                child: Text(
+                                  _countdownSeconds > 0
+                                      ? '${_countdownSeconds}s'
+                                      : '获取验证码',
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
-                  ),
                 ),
                 _isLoading
                     ? const Center(child: CircularProgressIndicator())
                     : Container(
-                  height: 50,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: ElevatedButton(
-                    onPressed: _isLoading
-                        ? null
-                        : _currentLoginType == '3'
-                        ? _showQRCodeLogin
-                        : _login,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                        height: 50,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: ElevatedButton(
+                          onPressed: _isLoading
+                              ? null
+                              : _currentLoginType == '3'
+                              ? _showQRCodeLogin
+                              : _login,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Theme.of(
+                              context,
+                            ).colorScheme.primary,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            //padding: const EdgeInsets.symmetric(vertical: 16),
+                          ),
+                          child: Text(
+                            _currentLoginType == '1'
+                                ? '登录'
+                                : _currentLoginType == '2'
+                                ? '验证码登录'
+                                : '二维码登录',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
                       ),
-                      //padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                    child: Text(
-                      _currentLoginType == '1'
-                          ? '登录'
-                          : _currentLoginType == '2'
-                          ? '验证码登录'
-                          : '二维码登录',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
